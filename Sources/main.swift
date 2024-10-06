@@ -8,25 +8,103 @@
 
 import Raylib
 
-protocol Hittable {}
+protocol Drawable {
+    func draw()
+}
 
-struct Bar: Hittable {
+protocol Hittable: Drawable {}
+
+protocol Moveable: Hittable {
+    var pos: Vector2 { get set }
+    var speed: Vector2 { get set }
+
+    func updatePosition() -> Self
+    func handleBounds() -> Self
+}
+
+struct Bar: Moveable {
     let color: Color
     var pos: Vector2
     var size: Vector2
     var speed: Vector2
+
+    func handleBounds() -> Bar {
+        var pos = self.pos
+        if self.pos.x <= 0 {
+            pos.x = 0
+        } else if self.pos.x >= (Float(GetScreenWidth()) - self.size.x) {
+            pos.x = Float(GetScreenWidth()) - self.size.x
+        }
+        return .init(color: self.color, pos: pos, size: self.size, speed: self.speed)
+    }
+
+    func updatePosition() -> Bar {
+        var speed = self.speed
+        if IsKeyDown(Int32(KEY_D.rawValue)) {
+            speed.x = 8
+        } else if IsKeyDown(Int32(KEY_A.rawValue)) {
+            speed.x = -8
+        } else {
+            speed.x = 0
+        }
+        return .init(
+            color: self.color,
+            pos: self.pos + speed,
+            size: self.size,
+            speed: self.speed
+        )
+    }
+
+    func draw() {
+        DrawRectangleV(self.pos, self.size, self.color)
+        DrawRectangleLinesEx(
+            .init(x: self.pos.x, y: self.pos.y, width: self.size.x, height: self.size.y), 0.5,
+            SKYBLUE)
+    }
 }
 
 struct Block: Hittable {
     var color: Color
     var pos: Vector2
+    static let size = Vector2(x: 80, y: 20)
+
+    func draw() {
+        DrawRectangleV(self.pos, Block.size, self.color)
+        DrawRectangleLinesEx(
+            .init(x: self.pos.x, y: self.pos.y, width: Block.size.x, height: Block.size.y),
+            0.5,
+            BLACK)
+    }
 }
 
-struct Ball: Hittable {
+struct Ball: Moveable {
     let color: Color
     let radius: Float
     var pos: Vector2
     var speed: Vector2
+
+    func updatePosition() -> Ball {
+        .init(color: self.color, radius: self.radius, pos: self.pos + self.speed, speed: self.speed)
+    }
+
+    func handleBounds() -> Ball {
+        var direction = Vector2(x: 1, y: 1)
+
+        if self.pos.x >= (Float(GetScreenWidth()) - self.radius) || self.pos.x <= self.radius {
+            direction.x = -1
+        }
+
+        if self.pos.y >= (Float(GetScreenHeight()) - self.radius) || self.pos.y <= self.radius {
+            direction.y = -1
+        }
+
+        return .init(
+            color: self.color, radius: self.radius, pos: self.pos, speed: self.speed * direction)
+    }
+
+    func draw() {
+        DrawCircleV(self.pos, self.radius, self.color)
+    }
 }
 
 // main
@@ -34,12 +112,15 @@ struct Ball: Hittable {
 let screenWidth: Int32 = 1280
 let screenHeight: Int32 = 720
 
+let blockRows = 16
+let blockColumns = 16
 let blockColors: [Color] = [
     DARKGRAY, GRAY, BROWN, BEIGE,
     PURPLE, VIOLET, BLUE, SKYBLUE,
     LIME, GREEN, YELLOW, GOLD,
     ORANGE, YELLOW, RED, MAROON,
 ]
+precondition(blockRows == blockColors.count)
 
 SetConfigFlags(FLAG_MSAA_4X_HINT.rawValue)
 InitWindow(screenWidth, screenHeight, "Breakout!")
@@ -52,20 +133,22 @@ var bar = Bar(
 )
 
 var ball = Ball(
-    color: MAROON,
-    radius: 15,
+    color: RAYWHITE,
+    radius: 10,
     pos: .init(x: Float(GetScreenWidth()) / 2, y: Float(GetScreenHeight()) / 2),
     speed: .init(x: 5.0, y: 4.0),
 )
 
-let blocks: [Block] = (0..<16).flatMap { i in
-    (0..<16).map { j in
+let blocks: [Block] = (0..<blockRows).flatMap { i in
+    (0..<blockColumns).map { j in
         .init(
             color: blockColors[j % blockColors.count],
-            pos: .init(x: Float(i) * bar.size.x, y: Float(j) * bar.size.y)
+            pos: .init(x: Float(i) * Block.size.x, y: Float(j) * Block.size.y)
         )
     }
 }
+
+var moveables: [Moveable] = [ball, bar]
 
 var pause = false
 var frameCounter = 0
@@ -78,52 +161,25 @@ while !WindowShouldClose() {
     }
 
     if !pause {
-        if IsKeyDown(Int32(KEY_D.rawValue)) {
-            bar.speed.x = 8
-        } else if IsKeyDown(Int32(KEY_A.rawValue)) {
-            bar.speed.x = -8
-        } else {
-            bar.speed.x = 0
+        moveables = moveables.map {
+            $0.updatePosition().handleBounds()
         }
-
-        ball.pos += ball.speed
-        bar.pos += bar.speed
-
-        if ball.pos.x >= (Float(GetScreenWidth()) - ball.radius) || ball.pos.x <= ball.radius {
-            ball.speed.x *= -1
-        }
-
-        if ball.pos.y >= (Float(GetScreenHeight()) - ball.radius) || ball.pos.y <= ball.radius {
-            ball.speed.y *= -1
-        }
-
-        if bar.pos.x <= 0 {
-            bar.pos.x = 0
-        } else if bar.pos.x >= (Float(GetScreenWidth()) - bar.size.x) {
-            bar.pos.x = Float(GetScreenWidth()) - bar.size.x
-        }
-
     } else {
         frameCounter += 1
     }
 
     BeginDrawing()
-    ClearBackground(RAYWHITE)
+    ClearBackground(DARKBLUE)
 
-    DrawCircleV(ball.pos, ball.radius, ball.color)
-    DrawRectangleV(bar.pos, bar.size, bar.color)
     DrawText("Press SPACE to pause", GetScreenWidth() / 2 - 60, GetScreenHeight() - 25, 20, GRAY)
-
-    for block in blocks {
-        DrawRectangleV(block.pos, bar.size, block.color)
-        DrawRectangleLinesEx(
-            .init(x: block.pos.x, y: block.pos.y, width: bar.size.x, height: bar.size.y),
-            0.5,
-            BLACK)
-    }
 
     if pause && (frameCounter / 30) % 2 == 1 {
         DrawText("PAUSED", GetScreenWidth() / 2 - 45, GetScreenHeight() / 2, 30, GRAY)
+    }
+
+    let drawables: [Drawable] = moveables + blocks
+    for drawable in drawables {
+        drawable.draw()
     }
 
     DrawFPS(10, 10)

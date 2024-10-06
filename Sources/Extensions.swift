@@ -7,6 +7,14 @@ extension Vector2: @retroactive AdditiveArithmetic {
         lhs.x == rhs.x && lhs.y == rhs.y
     }
 
+    public static func * (lhs: Self, rhs: Self) -> Self {
+        .init(x: lhs.x * rhs.x, y: lhs.y * rhs.y)
+    }
+
+    public static func *= (lhs: inout Self, rhs: Self) {
+        lhs = .init(x: lhs.x * rhs.x, y: lhs.y * rhs.y)
+    }
+
     public static func + (lhs: Self, rhs: Self) -> Self {
         .init(x: lhs.x + rhs.x, y: lhs.y + rhs.y)
     }
