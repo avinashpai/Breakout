@@ -12,14 +12,7 @@ struct Breakout {
 
     var bar: Bar
     var ball: Ball
-    var blocks: [Block] = (0..<blockRows).flatMap { i in
-        (0..<blockColumns).map { j in
-            .init(
-                color: blockColors[j % blockColors.count],
-                pos: .init(x: Float(i) * Block.size.x, y: Float(j) * Block.size.y),
-            )
-        }
-    }
+    var blocks: [Block]
 
     init(screenWidth: Int32, screenHeight: Int32) {
         InitWindow(screenWidth, screenHeight, "Breakout!")
@@ -38,29 +31,84 @@ struct Breakout {
             speed: .init(x: 5.0, y: 4.0),
         )
 
+        precondition(Self.blockRows == Self.blockColors.count)
+        blocks = (0..<Self.blockRows).flatMap { i in
+            (0..<Self.blockColumns).map { j in
+                .init(
+                    color: Self.blockColors[j % Self.blockColors.count],
+                    pos: .init(x: Float(i) * Block.size.x, y: Float(j) * Block.size.y),
+                )
+            }
+        }
     }
 
-    private func handleCollisions(_ blocks: inout [Block]) {
-        // TODO: check if ball collided with bar
+    private func collidedWith(_ ball: Ball, rect: Rectangle) -> (Vector2, Bool) {
+        var direction = Vector2(x: 1, y: 1)
+        var testX = ball.pos.x
+        var testY = ball.pos.y
 
-        blocks = blocks.map { block in
-            // TODO: Check if call collided w block
-            if false {
-                .init(color: block.color, pos: block.pos, alive: false)
+        if ball.pos.x < rect.x {
+            testX = rect.x
+            direction.x = -1
+        } else if ball.pos.x > rect.x + rect.width {
+            testX = rect.x + rect.width
+            direction.x = -1
+        }
+
+        if ball.pos.y < rect.y {
+            testY = rect.y
+            direction.y = -1
+        } else if ball.pos.y > rect.y + rect.height {
+            testY = rect.y + rect.height
+            direction.y = -1
+        }
+
+        let distX = ball.pos.x - testX
+        let distY = ball.pos.y - testY
+        let distance = sqrt((distX * distX) + (distY * distY))
+        return (direction, distance <= ball.radius)
+    }
+
+    private func handleCollisions(_ moveables: inout [Moveable], _ blocks: inout [Block]) {
+        guard var ball: Ball = moveables[0] as? Ball else {
+            return
+        }
+
+        guard let bar: Bar = moveables[1] as? Bar else {
+            return
+        }
+
+        if case let (direction, collided) = collidedWith(
+            ball,
+            rect:
+                .init(x: bar.pos.x, y: bar.pos.y, width: bar.size.x, height: bar.size.y)),
+            collided == true
+        {
+            ball.speed *= direction
+        }
+
+        blocks = blocks.filter {
+            let (direction, collided) = collidedWith(
+                ball,
+                rect:
+                    .init(x: $0.pos.x, y: $0.pos.y, width: Block.size.x, height: Block.size.y))
+            if !collided {
+                return true
             } else {
-                block
+                ball.speed *= direction
+                return false
             }
-        }.filter { $0.alive }
+        }
+
+        moveables[0] = ball
     }
 
     func run() throws {
-        precondition(Self.blockRows == Self.blockColors.count)
-
         SetTargetFPS(60)
         SetConfigFlags(FLAG_MSAA_4X_HINT.rawValue)
 
         var moveables: [Moveable] = [ball, bar]
-        var resolvedBlocks: [Block] = []
+        var resolvedBlocks: [Block] = self.blocks
         var pause = false
         var frameCounter = 0
 
@@ -73,8 +121,7 @@ struct Breakout {
                 moveables = moveables.map {
                     $0.updatePosition().handleBounds()
                 }
-                resolvedBlocks = self.blocks
-                handleCollisions(&resolvedBlocks)
+                handleCollisions(&moveables, &resolvedBlocks)
             } else {
                 frameCounter += 1
             }
