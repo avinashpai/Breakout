@@ -6,4 +6,4 @@
 //  Avinash Pai
 //
 
-try Breakout(screenWidth: 1280, screenHeight: 720).run()
+Breakout.run()

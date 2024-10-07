@@ -1,5 +1,18 @@
 import Raylib
 
+func DrawTextCentered(_ text: UnsafePointer<CChar>!, _ size: Float, _ color: Color) {
+    let textSize: Vector2 = MeasureTextEx(GetFontDefault(), text, size, 1)
+    DrawText(
+        text, GetScreenWidth() / 2 - Int32(textSize.x) / 2,
+        GetScreenHeight() / 2 - Int32(textSize.y) / 2, Int32(size), color)
+}
+
+func DrawTextCenteredX(_ text: UnsafePointer<CChar>!, _ y: Int32, _ size: Float, _ color: Color) {
+    let width = MeasureText(text, Int32(size))
+    DrawText(
+        text, GetScreenWidth() / 2 - width / 2, y, Int32(size), color)
+}
+
 extension Vector2: @retroactive Numeric {
     public typealias Magnitude = Float
     public var magnitude: Magnitude {

@@ -1,150 +1,150 @@
 import Raylib
 
 struct Breakout {
+    static let screenWidth: Int32 = 1280
+    static let screenHeight: Int32 = 720
+
     static let blockRows = 16
-    static let blockColumns = 16
+    static let blockColumns = 12
     static let blockColors: [Color] = [
-        DARKGRAY, GRAY, BROWN, BEIGE,
-        PURPLE, VIOLET, BLUE, SKYBLUE,
-        LIME, GREEN, YELLOW, GOLD,
-        ORANGE, YELLOW, RED, MAROON,
+        DARKGRAY, GRAY, BROWN,
+        PURPLE, VIOLET, SKYBLUE,
+        LIME, GREEN, GOLD,
+        ORANGE, YELLOW, MAROON,
     ]
 
-    var bar: Bar
-    var ball: Ball
-    var blocks: [Block]
+    static let bar = Bar(
+        color: DARKGRAY,
+        pos: .init(x: Float(GetScreenWidth()) / 2 - 50, y: Float(GetScreenHeight()) * (4 / 5)),
+        size: .init(x: 100, y: 15),
+        speed: .init(x: 0, y: 0)
+    )
 
-    init(screenWidth: Int32, screenHeight: Int32) {
-        InitWindow(screenWidth, screenHeight, "Breakout!")
+    static let ball = Ball(
+        color: RAYWHITE,
+        radius: 10,
+        pos: .init(x: Float(GetScreenWidth()) / 2 - 10, y: Float(GetScreenHeight()) / 2 + 10),
+        speed: .init(x: 5.0, y: 4.0),
+    )
 
-        bar = Bar(
-            color: DARKGRAY,
-            pos: .init(x: Float(GetScreenWidth()) / 2, y: Float(GetScreenHeight()) * (4 / 5)),
-            size: .init(x: 80, y: 20),
-            speed: .init(x: 0, y: 0)
-        )
-
-        ball = Ball(
-            color: RAYWHITE,
-            radius: 10,
-            pos: .init(x: Float(GetScreenWidth()) / 2, y: Float(GetScreenHeight()) / 2),
-            speed: .init(x: 5.0, y: 4.0),
-        )
-
-        precondition(Self.blockRows == Self.blockColors.count)
-        blocks = (0..<Self.blockRows).flatMap { i in
-            (0..<Self.blockColumns).map { j in
-                .init(
-                    color: Self.blockColors[j % Self.blockColors.count],
-                    pos: .init(x: Float(i) * Block.size.x, y: Float(j) * Block.size.y),
-                )
-            }
+    static let blocks: [Block] = (0..<Self.blockRows).flatMap { i in
+        (0..<Self.blockColumns).map { j in
+            .init(
+                color: Self.blockColors[j % Self.blockColors.count],
+                pos: .init(x: Float(i) * Block.size.x, y: Float(j) * Block.size.y),
+            )
         }
     }
 
-    private func collidedWith(_ ball: Ball, rect: Rectangle) -> (Vector2, Bool) {
-        var direction = Vector2(x: 1, y: 1)
-        var testX = ball.pos.x
-        var testY = ball.pos.y
+    struct State {
+        var bar = Breakout.bar
+        var ball = Breakout.ball
+        var blocks = Breakout.blocks
 
-        if ball.pos.x < rect.x {
-            testX = rect.x
-            direction.x = -1
-        } else if ball.pos.x > rect.x + rect.width {
-            testX = rect.x + rect.width
-            direction.x = -1
+        var pause = false
+
+        var lives = 5
+        var frameCounter = 0
+
+        var won: Bool {
+            self.blocks.isEmpty
         }
 
-        if ball.pos.y < rect.y {
-            testY = rect.y
-            direction.y = -1
-        } else if ball.pos.y > rect.y + rect.height {
-            testY = rect.y + rect.height
-            direction.y = -1
+        var gameover: Bool {
+            self.won || self.lives == 0
         }
 
-        let distX = ball.pos.x - testX
-        let distY = ball.pos.y - testY
-        let distance = sqrt((distX * distX) + (distY * distY))
-        return (direction, distance <= ball.radius)
+        mutating func reset() {
+            bar = Breakout.bar
+            ball = Breakout.ball
+            blocks = Breakout.blocks
+
+            pause = false
+
+            lives = 5
+            frameCounter = 0
+        }
     }
 
-    private func handleCollisions(_ moveables: inout [Moveable], _ blocks: inout [Block]) {
-        guard var ball: Ball = moveables[0] as? Ball else {
-            return
-        }
-
-        guard let bar: Bar = moveables[1] as? Bar else {
-            return
-        }
-
-        if case let (direction, collided) = collidedWith(
-            ball,
+    private static func handleCollisions(_ bar: Bar, _ ball: inout Ball, _ blocks: inout [Block]) {
+        var nBall = ball
+        if case let (direction, collided) = nBall.collidedWith(
             rect:
                 .init(x: bar.pos.x, y: bar.pos.y, width: bar.size.x, height: bar.size.y)),
             collided == true
         {
-            ball.speed *= direction
+            nBall.speed *= direction
         }
 
         blocks = blocks.filter {
-            let (direction, collided) = collidedWith(
-                ball,
+            let (direction, collided) = nBall.collidedWith(
                 rect:
                     .init(x: $0.pos.x, y: $0.pos.y, width: Block.size.x, height: Block.size.y))
             if !collided {
                 return true
             } else {
-                ball.speed *= direction
+                nBall.speed *= direction
                 return false
             }
         }
 
-        moveables[0] = ball
+        ball = nBall
     }
 
-    func run() throws {
+    static func run() {
         SetTargetFPS(60)
         SetConfigFlags(FLAG_MSAA_4X_HINT.rawValue)
+        InitWindow(Self.screenWidth, Self.screenHeight, "Breakout!")
 
-        var moveables: [Moveable] = [ball, bar]
-        var resolvedBlocks: [Block] = self.blocks
-        var pause = false
-        var frameCounter = 0
-
+        var state = State()
         while !WindowShouldClose() {
             if IsKeyPressed(Int32(KEY_SPACE.rawValue)) {
-                pause = !pause
+                state.pause = !state.pause
             }
 
-            if !pause {
-                moveables = moveables.map {
-                    $0.updatePosition().handleBounds()
-                }
-                handleCollisions(&moveables, &resolvedBlocks)
+            if !state.pause && !state.gameover {
+                state.bar = state.bar.updatePosition().handleBounds()
+                state.ball = state.ball.updatePosition().handleBounds(&state.lives)
+                Self.handleCollisions(state.bar, &state.ball, &state.blocks)
             } else {
-                frameCounter += 1
+                state.frameCounter += 1
             }
 
             BeginDrawing()
             ClearBackground(DARKBLUE)
 
-            DrawText(
-                "Press SPACE to pause", GetScreenWidth() / 2 - 60, GetScreenHeight() - 25, 20, GRAY)
+            if state.gameover {
+                DrawTextCentered(
+                    "\(state.won ? "YOU WIN!": "GAMEOVER")", 50, state.won ? GREEN : RED)
+                DrawTextCenteredX(
+                    "Exit window or press R to restart", GetScreenHeight() / 2 + 25, 25, GRAY)
+            } else {
+                DrawTextCenteredX(
+                    "Press SPACE to pause", GetScreenHeight() - 25, 20,
+                    GRAY)
 
-            if pause && (frameCounter / 30) % 2 == 1 {
-                DrawText("PAUSED", GetScreenWidth() / 2 - 45, GetScreenHeight() / 2, 30, GRAY)
-            }
+                if state.pause && (state.frameCounter / 30) % 2 == 1 {
+                    DrawTextCentered("PAUSED", 50, GRAY)
+                }
 
-            let drawables: [Drawable] = moveables + resolvedBlocks
-            for drawable in drawables {
-                drawable.draw()
+                DrawTextCenteredX(
+                    "Lives: \(state.lives)", GetScreenHeight() - 55, 25, RED)
+
+                let drawables: [Drawable] = [state.bar, state.ball] + state.blocks
+                for drawable in drawables {
+                    drawable.draw()
+                }
             }
 
             DrawFPS(10, 10)
 
             EndDrawing()
+
+            if IsKeyPressed(Int32(KEY_R.rawValue)) {
+                state.reset()
+            }
         }
+
         CloseWindow()
     }
 }
